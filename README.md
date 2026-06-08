@@ -138,7 +138,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Open **http://localhost:8080/login** — default credentials: `admin` / `Admin@1234`
+Open **http://localhost:5060/login** — default credentials: `admin` / `Admin@1234`
 
 ## 📖 Documentation
 

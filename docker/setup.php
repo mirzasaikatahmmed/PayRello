@@ -156,7 +156,7 @@ try {
 
 write_config($config_file, $db_host, $db_user, $db_pass, $db_name, $db_prefix);
 
-$app_port = getenv('APP_PORT') ?: '8080';
+$app_port = getenv('APP_PORT') ?: '5060';
 echo "[setup] ✓ Setup complete!\n";
 echo "[setup]   Login URL   : http://localhost:$app_port/login\n";
 echo "[setup]   Dashboard   : http://localhost:$app_port/admin/dashboard\n";
