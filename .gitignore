@@ -1,0 +1,40 @@
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+!.env.example
+
+# ── Generated config (written by setup.php on first boot) ─────────────────────
+pp-config.php
+
+# ── User uploads & storage ────────────────────────────────────────────────────
+pp-media/storage/
+pp-media/.htaccess
+
+# ── Docker runtime ────────────────────────────────────────────────────────────
+docker/setup.log
+
+# ── OS & editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── PHP ───────────────────────────────────────────────────────────────────────
+vendor/
+composer.lock
+
+# ── Node (if ever used for asset building) ────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+/logs/
+
+# ── Build artefacts ───────────────────────────────────────────────────────────
+/dist/
+/build/
