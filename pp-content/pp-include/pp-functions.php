@@ -1984,89 +1984,202 @@
             die('Invalid transaction');
         }
 
-        $tx = $data['transaction'];
+        $tx    = $data['transaction'];
         $brand = $data['brand'];
 
         $amountPaid = money_add(money_sub($tx['amount'], $tx['discount_amount']), $tx['processing_fee']);
+        $status     = strtoupper($tx['status']);
+        $tz         = ($brand['locale']['timezone'] === '--' || $brand['locale']['timezone'] === '') ? 'Asia/Dhaka' : $brand['locale']['timezone'];
 
+        // ── Colours ────────────────────────────────────────────────────────────
+        $c = [
+            'header_bg'   => [22,  24,  47],   // dark navy
+            'accent'      => [99,  102, 241],  // indigo
+            'section_bg'  => [245, 246, 250],  // very light gray
+            'row_alt'     => [252, 252, 255],  // faint alternate row
+            'border'      => [218, 220, 232],  // soft border
+            'label'       => [110, 112, 140],  // muted label
+            'value'       => [22,  24,  47],   // dark value text
+            'white'       => [255, 255, 255],
+        ];
+        $statusColors = [
+            'COMPLETED' => [34,  197, 94],
+            'PENDING'   => [234, 179, 8],
+            'REFUNDED'  => [59,  130, 246],
+            'CANCELED'  => [239, 68,  68],
+        ];
+        $sc = $statusColors[$status] ?? [120, 120, 120];
+
+        // ── Page setup ─────────────────────────────────────────────────────────
         $pdf = new FPDF('P', 'mm', 'A4');
         $pdf->AddPage();
-        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->SetAutoPageBreak(true, 20);
 
+        $W  = 210;   // page width
+        $mx = 14;    // left/right margin
+        $cw = $W - $mx * 2;  // content width
+        $lw = 58;    // label column width
+
+        // ── Header bar ─────────────────────────────────────────────────────────
+        $pdf->SetFillColor(...$c['header_bg']);
+        $pdf->Rect(0, 0, $W, 46, 'F');
+
+        // Logo (left side of header, vertically centred)
+        $logoLoaded = false;
         if (!empty($brand['logo'])) {
             try {
-                $pdf->Image($brand['logo'], 10, 10, 35);
-            } catch (Exception $e) {
-                // Skip logo if remote URL is unreachable or image is invalid
-            }
+                $pdf->Image($brand['logo'], $mx, 9, 28, 28);
+                $logoLoaded = true;
+            } catch (Exception $e) { /* skip */ }
         }
 
-        $pdf->SetFont('Arial', 'B', 14);
-        $pdf->SetXY(50, 12);
-        $pdf->Cell(0, 8, $brand['name'], 0, 1);
+        // Title text
+        $titleX = $logoLoaded ? $mx + 32 : 0;
+        $titleW = $logoLoaded ? $W - $mx - 32 : $W;
 
-        $pdf->SetFont('Arial', '', 10);
-        $pdf->SetX(50);
-        $pdf->Cell(0, 6, $brand['address']['city'].', '.$brand['address']['country'], 0, 1);
+        $pdf->SetTextColor(...$c['white']);
+        $pdf->SetFont('Arial', 'B', 17);
+        $pdf->SetXY($titleX, 13);
+        $pdf->Cell($titleW - ($logoLoaded ? $mx : 0), 9, 'PAYMENT RECEIPT', 0, 1, $logoLoaded ? 'L' : 'C');
 
-        $pdf->Ln(10);
+        $pdf->SetFont('Arial', '', 9);
+        $pdf->SetTextColor(180, 182, 210);
+        $pdf->SetXY($titleX, 23);
+        $pdf->Cell($titleW - ($logoLoaded ? $mx : 0), 6, $brand['name'], 0, 1, $logoLoaded ? 'L' : 'C');
 
-        $pdf->SetFont('Arial', 'B', 16);
-        $pdf->Cell(0, 10, 'Payment Receipt', 0, 1, 'C');
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->SetXY($titleX, 30);
+        $city    = ($brand['address']['city']    !== '--') ? $brand['address']['city']    : '';
+        $country = ($brand['address']['country'] !== '--') ? $brand['address']['country'] : '';
+        $location = trim($city . ($city && $country ? ', ' : '') . $country);
+        if ($location) {
+            $pdf->Cell($titleW - ($logoLoaded ? $mx : 0), 5, $location, 0, 1, $logoLoaded ? 'L' : 'C');
+        }
 
-        $status = strtoupper($tx['status']);
+        // ── Status + amount area ────────────────────────────────────────────────
+        $pdf->SetY(54);
 
-        $statusColors = [
-            'COMPLETED' => [46,204,113],
-            'PENDING'   => [241,196,15],
-            'REFUNDED'  => [52,152,219],
-            'CANCELED'  => [231,76,60],
-        ];
+        // Status badge
+        $badgeW = 44;
+        $badgeX = ($W - $badgeW) / 2;
+        $pdf->SetFillColor(...$sc);
+        $pdf->SetTextColor(...$c['white']);
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->SetX($badgeX);
+        $pdf->Cell($badgeW, 7, $status, 0, 1, 'C', true);
 
-        $color = $statusColors[$status] ?? [120,120,120];
+        $pdf->Ln(5);
 
-        $pdf->Ln(3);
-        $pdf->SetFont('Arial', 'B', 12);
-        $pdf->SetTextColor($color[0], $color[1], $color[2]);
-        $pdf->Cell(0, 8, 'STATUS: '.$status, 0, 1, 'C');
-        $pdf->SetTextColor(0,0,0);
+        // Amount label
+        $pdf->SetTextColor(...$c['label']);
+        $pdf->SetFont('Arial', '', 9);
+        $pdf->Cell($W, 5, 'Total Amount Paid', 0, 1, 'C');
 
+        // Big amount
+        $pdf->SetTextColor(...$c['value']);
+        $pdf->SetFont('Arial', 'B', 30);
+        $pdf->Cell($W, 14, $tx['currency'].' '.money_round($amountPaid, 2), 0, 1, 'C');
+
+        // Net amount sub-line
+        $pdf->SetFont('Arial', '', 9);
+        $pdf->SetTextColor(...$c['label']);
+        $localLine = 'Net  '.$tx['local_currency'].' '.money_round($tx['local_net_amount'], 2);
+        $pdf->Cell($W, 5, $localLine, 0, 1, 'C');
+
+        // Thin accent line separator
         $pdf->Ln(6);
-        $pdf->SetFont('Arial', '', 11);
-        $pdf->Cell(0, 6, 'Amount Paid', 0, 1, 'C');
+        $pdf->SetDrawColor(...$c['accent']);
+        $pdf->SetLineWidth(0.5);
+        $pdf->Line($mx, $pdf->GetY(), $W - $mx, $pdf->GetY());
+        $pdf->SetLineWidth(0.2);
+        $pdf->Ln(7);
 
-        $pdf->SetFont('Arial', 'B', 22);
-        $pdf->Cell(0, 12, money_round($amountPaid, 2), 0, 1, 'C');
+        // ── Generic section renderer ────────────────────────────────────────────
+        $drawSection = function(string $heading, array $rows) use ($pdf, $mx, $cw, $lw, $W, $c) {
+            // Section header
+            $pdf->SetFillColor(...$c['section_bg']);
+            $pdf->SetDrawColor(...$c['border']);
+            $pdf->SetTextColor(...$c['accent']);
+            $pdf->SetFont('Arial', 'B', 9);
+            $pdf->SetX($mx);
+            $pdf->Cell($cw, 8, '  '.$heading, 'LTR', 1, 'L', true);
 
-        $pdf->Ln(2);
-        $pdf->SetFont('Arial', '', 11);
-        $pdf->Cell(0, 6, 'Local Net Amount: '.money_round($tx['local_net_amount'], 2).' '.$tx['local_currency'], 0, 1, 'C');
+            // Data rows
+            foreach ($rows as $i => [$label, $value]) {
+                $alt = ($i % 2 === 1);
+                if ($alt) {
+                    $pdf->SetFillColor(...$c['row_alt']);
+                } else {
+                    $pdf->SetFillColor(...$c['white']);
+                }
 
-        $pdf->Ln(6);
-        $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
-        $pdf->Ln(6);
+                $pdf->SetFont('Arial', 'B', 8);
+                $pdf->SetTextColor(...$c['label']);
+                $pdf->SetX($mx);
+                $pdf->Cell($lw, 7, $label, 'LR', 0, 'L', true);
 
-        sectionTitle($pdf, 'Transaction Details');
-        infoRow($pdf, 'Transaction Ref', $tx['ref']);
-        infoRow($pdf, 'Payment Method', $tx['payment_method']);
-        infoRow($pdf, 'Created Date', convertUTCtoUserTZ($tx['created_date'], ($brand['locale']['timezone'] === '--' || $brand['locale']['timezone'] === '') ? 'Asia/Dhaka' : $brand['locale']['timezone'], "M d, Y h:i A"));
+                $pdf->SetFont('Arial', '', 8);
+                $pdf->SetTextColor(...$c['value']);
+                $pdf->Cell($cw - $lw, 7, $value ?? '--', 'R', 1, 'L', true);
+            }
 
-        $pdf->Ln(3);
-        sectionTitle($pdf, 'Customer Details');
-        infoRow($pdf, 'Name', $tx['customer']['name']);
-        infoRow($pdf, 'Email', $tx['customer']['email']);
-        infoRow($pdf, 'Mobile', $tx['customer']['mobile']);
+            // Close border
+            $pdf->SetX($mx);
+            $pdf->SetFillColor(...$c['white']);
+            $pdf->Cell($cw, 0, '', 'T', 1);
+            $pdf->Ln(5);
+        };
 
-        $pdf->Ln(3);
-        sectionTitle($pdf, 'Payment Breakdown');
-        infoRow($pdf, 'Amount', money_round($tx['amount'], 2).' '.$tx['currency']);
-        infoRow($pdf, 'Discount', money_round($tx['discount_amount'], 2).' '.$tx['currency']);
-        infoRow($pdf, 'Processing Fee', money_round($tx['processing_fee'], 2).' '.$tx['currency']);
+        // ── Transaction Details ────────────────────────────────────────────────
+        $drawSection('TRANSACTION DETAILS', [
+            ['Transaction Ref',  $tx['ref']],
+            ['Payment Method',   $tx['payment_method']],
+            ['Date & Time',      convertUTCtoUserTZ($tx['created_date'], $tz, 'M d, Y  h:i A')],
+            ['Status',           ucfirst(strtolower($tx['status']))],
+        ]);
 
+        // ── Customer Details ───────────────────────────────────────────────────
+        $name   = ($tx['customer']['name']   !== '--' && $tx['customer']['name'])   ? $tx['customer']['name']   : '--';
+        $email  = ($tx['customer']['email']  !== '--' && $tx['customer']['email'])  ? $tx['customer']['email']  : '--';
+        $mobile = ($tx['customer']['mobile'] !== '--' && $tx['customer']['mobile']) ? $tx['customer']['mobile'] : '--';
 
-        $pdf->Ln(10);
-        $pdf->SetFont('Arial', 'I', 9);
-        $pdf->Cell(0, 6, 'This is a system generated receipt.', 0, 1, 'C');
+        $drawSection('CUSTOMER DETAILS', [
+            ['Full Name', $name],
+            ['Email',     $email],
+            ['Mobile',    $mobile],
+        ]);
+
+        // ── Payment Breakdown ──────────────────────────────────────────────────
+        $drawSection('PAYMENT BREAKDOWN', [
+            ['Subtotal',       money_round($tx['amount'], 2).' '.$tx['currency']],
+            ['Discount',       money_round($tx['discount_amount'], 2).' '.$tx['currency']],
+            ['Processing Fee', money_round($tx['processing_fee'], 2).' '.$tx['currency']],
+        ]);
+
+        // Total row (accent highlight)
+        $pdf->SetFillColor(...$c['accent']);
+        $pdf->SetDrawColor(...$c['accent']);
+        $pdf->SetTextColor(...$c['white']);
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->SetX($mx);
+        $pdf->Cell($lw, 9, '  Total Paid', 'LB', 0, 'L', true);
+        $pdf->Cell($cw - $lw, 9, $tx['currency'].' '.money_round($amountPaid, 2), 'BR', 1, 'R', true);
+
+        // ── Footer ─────────────────────────────────────────────────────────────
+        $pdf->Ln(12);
+        $pdf->SetDrawColor(...$c['border']);
+        $pdf->SetLineWidth(0.3);
+        $pdf->Line($mx, $pdf->GetY(), $W - $mx, $pdf->GetY());
+        $pdf->Ln(5);
+
+        $pdf->SetFont('Arial', 'I', 7.5);
+        $pdf->SetTextColor(...$c['label']);
+        $pdf->Cell($W, 5, 'This is a system generated receipt.', 0, 1, 'C');
+
+        if (!empty($brand['support']['email']) && $brand['support']['email'] !== '--') {
+            $pdf->SetFont('Arial', '', 7.5);
+            $pdf->Cell($W, 5, 'For support contact: '.$brand['support']['email'], 0, 1, 'C');
+        }
 
         $pdf->Output('D', 'Receipt-'.$tx['ref'].'.pdf');
         exit();

@@ -17,7 +17,6 @@ docker/setup.log
 Thumbs.db
 desktop.ini
 .idea/
-.vscode/
 *.swp
 *.swo
 *~
@@ -38,3 +37,7 @@ yarn-error.log
 # ── Build artefacts ───────────────────────────────────────────────────────────
 /dist/
 /build/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
