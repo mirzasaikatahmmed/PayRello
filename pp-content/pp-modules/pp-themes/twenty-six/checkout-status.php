@@ -5,7 +5,12 @@
     }
 
     if(isset($_GET['receipt'])){
-        pp_downloadReceiptPDF($data);
+        try {
+            pp_downloadReceiptPDF($data);
+        } catch (Exception $e) {
+            http_response_code(500);
+            exit('Receipt generation failed: ' . htmlspecialchars($e->getMessage()));
+        }
     }
 ?>
 

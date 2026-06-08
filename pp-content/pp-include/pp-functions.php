@@ -1994,7 +1994,11 @@
         $pdf->SetAutoPageBreak(true, 15);
 
         if (!empty($brand['logo'])) {
-            $pdf->Image($brand['logo'], 10, 10, 35);
+            try {
+                $pdf->Image($brand['logo'], 10, 10, 35);
+            } catch (Exception $e) {
+                // Skip logo if remote URL is unreachable or image is invalid
+            }
         }
 
         $pdf->SetFont('Arial', 'B', 14);
@@ -2065,6 +2069,7 @@
         $pdf->Cell(0, 6, 'This is a system generated receipt.', 0, 1, 'C');
 
         $pdf->Output('D', 'Receipt-'.$tx['ref'].'.pdf');
+        exit();
     }
 
     function sectionTitle($pdf, $title)
